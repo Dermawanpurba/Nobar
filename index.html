@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Party</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- PeerJS untuk WebRTC P2P Panggilan & Chat -->
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  
+  <style>
+    /* Sembunyikan scrollbar untuk area chat tapi tetap bisa di-scroll */
+    #chatMessages::-webkit-scrollbar { width: 6px; }
+    #chatMessages::-webkit-scrollbar-track { background: transparent; }
+    #chatMessages::-webkit-scrollbar-thumb { background-color: #374151; border-radius: 10px; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between shadow-md">
+    <div class="flex items-center gap-3">
+      <i class="fa-solid fa-display text-indigo-500 text-xl"></i>
+      <h1 class="text-xl font-bold tracking-tight">NontonBareng</h1>
+    </div>
+    
+    <!-- Kontrol Ruangan (Sembunyi di Lobby) -->
+    <div id="roomControls" class="hidden flex items-center gap-4">
+      <div class="bg-gray-800 px-3 py-1.5 rounded-md text-sm flex items-center gap-2 border border-gray-700">
+        <span class="text-gray-400">ID Ruangan:</span>
+        <span id="roomIdDisplay" class="font-mono font-bold text-indigo-400 select-all">---</span>
+        <button onclick="copyRoomId()" class="text-gray-400 hover:text-white transition-colors" title="Salin ID">
+          <i class="fa-regular fa-copy"></i>
+        </button>
+      </div>
+      <button onclick="leaveRoom()" class="flex items-center gap-2 bg-red-600/90 hover:bg-red-600 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 relative flex flex-col h-[calc(100vh-68px)]">
+    
+    <!-- ================= VIEW LOBBY ================= -->
+    <div id="lobbyView" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="max-w-4xl w-full grid md:grid-cols-2 gap-8">
+        
+        <!-- Buat Ruangan (Host) -->
+        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
+          <div class="bg-indigo-500/10 p-5 rounded-full mb-6">
+            <i class="fa-solid fa-video text-3xl text-indigo-500"></i>
+          </div>
+          <h2 class="text-2xl font-bold mb-2">Mulai Nonton Bareng</h2>
+          <p class="text-gray-400 mb-8 text-sm leading-relaxed">Bagikan layar PC/Laptop Anda agar bisa ditonton bersama teman atau pasangan.</p>
+          
+          <button id="hostBtn" onclick="startHosting()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2">
+            <i class="fa-solid fa-desktop"></i> Bagikan Layar Sekarang
+          </button>
+        </div>
+
+        <!-- Gabung Ruangan (Guest) -->
+        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
+          <div class="bg-emerald-500/10 p-5 rounded-full mb-6">
+            <i class="fa-solid fa-users text-3xl text-emerald-500"></i>
+          </div>
+          <h2 class="text-2xl font-bold mb-2">Gabung ke Ruangan</h2>
+          <p class="text-gray-400 mb-8 text-sm leading-relaxed">Masukkan ID Ruangan yang diberikan oleh teman Anda untuk mulai menonton.</p>
+          
+          <div class="w-full flex flex-col gap-3">
+            <input type="text" id="roomInput" placeholder="Masukkan ID (Cth: NONTON-XYZ)" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-3 px-4 text-center font-mono text-lg uppercase focus:outline-none focus:border-indigo-500 transition-colors">
+            <button id="joinBtn" onclick="joinRoom()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2">
+              <i class="fa-solid fa-play"></i> Gabung Menonton
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================= VIEW RUANGAN ================= -->
+    <div id="roomView" class="hidden flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+      
+      <!-- Area Video -->
+      <div class="flex-1 bg-black flex flex-col relative border-r border-gray-800">
+        <div class="absolute top-4 left-4 z-10 flex flex-col gap-2">
+          <div class="bg-black/60 px-3 py-1.5 rounded text-sm text-white backdrop-blur-sm flex items-center gap-2 w-fit pointer-events-none">
+            <div id="statusDot" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></div>
+            <span id="statusText">Menginisialisasi...</span>
+          </div>
+          
+          <!-- Peringatan Akses Layar Diblokir -->
+          <div id="warningNotice" class="hidden bg-amber-900/90 border border-amber-500/50 px-4 py-3 rounded-lg text-sm text-amber-100 backdrop-blur-sm shadow-xl max-w-md flex flex-col gap-3">
+            <div class="flex items-start gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5"></i>
+              <div>
+                <strong>Akses Diblokir oleh iFrame</strong>
+                <p class="text-xs mt-1 text-amber-200/80">Sistem seperti Canvas atau Google Apps Script melarang fitur perekaman layar. Silakan <b>salin kode HTML ini</b>, simpan sebagai file <code>.html</code> dan buka di komputer, atau Deploy ke hosting asli (Cloudflare Pages, Vercel, Netlify).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <video id="videoPlayer" autoplay playsinline class="w-full h-full object-contain"></video>
+        
+        <div id="guestNotice" class="hidden absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-300 bg-black/80 px-4 py-2 rounded-full shadow-lg border border-gray-700 backdrop-blur-sm cursor-pointer" onclick="document.getElementById('videoPlayer').play()">
+          <i class="fa-solid fa-volume-high mr-1"></i> Klik area ini jika video/suara belum muncul
+        </div>
+      </div>
+
+      <!-- Area Chat & Voice -->
+      <div class="w-full md:w-80 lg:w-96 bg-gray-900 flex flex-col h-[40vh] md:h-full shrink-0">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i class="fa-regular fa-comments text-indigo-400"></i>
+            <h3 class="font-semibold">Live Chat</h3>
+          </div>
+          <div class="flex items-center gap-3">
+            <!-- Tombol Nelpon Live -->
+            <button id="micBtn" onclick="toggleMic()" class="bg-gray-800 hover:bg-gray-700 text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors" title="Nyala/Matikan Live Call" disabled>
+              <i id="micIcon" class="fa-solid fa-microphone-slash text-red-400 text-xs"></i>
+            </button>
+            <span id="chatParticipant" class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">Offline</span>
+          </div>
+        </div>
+        
+        <!-- Daftar Pesan -->
+        <div id="chatMessages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scroll-smooth">
+          <div class="text-center text-gray-500 text-sm mt-2 italic">Belum ada obrolan.</div>
+        </div>
+
+        <!-- Input Chat -->
+        <form id="chatForm" class="p-3 border-t border-gray-800 flex gap-2 bg-gray-950">
+          <input type="text" id="chatInput" placeholder="Ketik pesan..." autocomplete="off" class="flex-1 bg-gray-900 border border-gray-700 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors" disabled>
+          <button type="submit" id="sendBtn" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 text-white w-10 h-10 rounded-full transition-colors flex shrink-0 items-center justify-center shadow-sm" disabled>
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Pemutar Audio tersembunyi untuk panggilan suara -->
+    <audio id="voicePlayer" autoplay class="hidden"></audio>
+
+  </main>
+
+  <script>
+    // --- Variabel Global ---
+    let peer = null;
+    let conn = null; // Koneksi data (Chat)
+    let mediaCall = null; // Koneksi media (Video/Screen)
+    let outgoingVoiceCall = null; // Koneksi Call khusus suara
+    let localStream = null;
+    let myMicStream = null; // Stream mikrofon kita
+    let isHost = false;
+    let remotePeerId = null; // ID tujuan (Teman kita)
+    let connTimeout = null;
+
+    // Konfigurasi Server Diperkuat (Solusi Beda Jaringan)
+    const peerOptions = {
+      debug: 2, 
+      config: {
+        'iceServers': [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' } // Fallback kuat
+        ]
+      }
+    };
+
+    // --- Referensi Elemen DOM ---
+    const el = (id) => document.getElementById(id);
+    const viewLobby = el('lobbyView');
+    const viewRoom = el('roomView');
+    const roomControls = el('roomControls');
+    const videoPlayer = el('videoPlayer');
+    const voicePlayer = el('voicePlayer');
+    const chatMessages = el('chatMessages');
+    const chatInput = el('chatInput');
+    const chatForm = el('chatForm');
+    const sendBtn = el('sendBtn');
+    const statusText = el('statusText');
+    const statusDot = el('statusDot');
+    const warningNotice = el('warningNotice');
+    const micBtn = el('micBtn');
+    const micIcon = el('micIcon');
+
+    // --- Utilitas UI ---
+    function setStatus(text, color = 'bg-indigo-500') {
+      statusText.innerText = text;
+      statusDot.className = `w-2 h-2 rounded-full ${color} animate-pulse`;
+    }
+
+    function showRoomUI(roomIdText, isHosting) {
+      viewLobby.classList.add('hidden');
+      viewRoom.classList.remove('hidden');
+      roomControls.classList.remove('hidden');
+      el('roomIdDisplay').innerText = roomIdText;
+      
+      if (!isHosting) {
+        el('guestNotice').classList.remove('hidden');
+      }
+    }
+
+    function copyRoomId() {
+      const id = el('roomIdDisplay').innerText;
+      navigator.clipboard.writeText(id).then(() => {
+        alert('ID Ruangan disalin: ' + id);
+      }).catch(err => {
+        const temp = document.createElement('textarea');
+        temp.value = id;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        alert('ID Ruangan disalin: ' + id);
+      });
+    }
+
+    // --- Handler Panggilan (Layar & Suara) ---
+    function setupCallHandler() {
+      peer.on('call', (call) => {
+        // Cek jika ini panggilan khusus suara (Nelpon Live)
+        if (call.metadata && call.metadata.type === 'voice') {
+          call.answer(); // Angkat telepon suara otomatis
+          call.on('stream', (remoteAudioStream) => {
+            voicePlayer.srcObject = remoteAudioStream;
+          });
+        } 
+        // Jika bukan, berarti ini kiriman layar (Screen Share)
+        else {
+          mediaCall = call;
+          call.answer(); // Guest menjawab screen share
+          call.on('stream', (remoteVideoStream) => {
+            videoPlayer.srcObject = remoteVideoStream;
+            videoPlayer.muted = false; // Guest harus mendengar suara layar
+          });
+        }
+      });
+    }
+
+    // --- Logika Nelpon Live (Voice Call) ---
+    async function toggleMic() {
+      if (myMicStream) {
+        // Matikan mic
+        myMicStream.getTracks().forEach(t => t.stop());
+        myMicStream = null;
+        if (outgoingVoiceCall) outgoingVoiceCall.close();
+        
+        micIcon.className = 'fa-solid fa-microphone-slash text-red-400 text-xs';
+        micBtn.classList.remove('bg-emerald-600');
+        micBtn.classList.add('bg-gray-800');
+        appendMessage('Sistem', 'Anda mematikan telepon.', true);
+      } else {
+        try {
+          micIcon.className = 'fa-solid fa-spinner fa-spin text-white text-xs';
+          
+          // Meminta Izin Mikrofon Saja
+          myMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          
+          micIcon.className = 'fa-solid fa-microphone text-white text-xs';
+          micBtn.classList.remove('bg-gray-800');
+          micBtn.classList.add('bg-emerald-600');
+          appendMessage('Sistem', 'Anda bergabung ke mode nelpon.', true);
+
+          // Panggil teman secara khusus untuk mengirimkan suara kita
+          if (remotePeerId) {
+            outgoingVoiceCall = peer.call(remotePeerId, myMicStream, { metadata: { type: 'voice' } });
+          }
+        } catch(e) {
+          console.error(e);
+          micIcon.className = 'fa-solid fa-microphone-slash text-red-400 text-xs';
+          alert('Gagal mengakses mikrofon. Browser Anda mungkin memblokir izin atau situs ini belum menggunakan HTTPS.');
+        }
+      }
+    }
+
+
+    // --- Logika HOST (Berbagi Layar) ---
+    async function startHosting() {
+      const btn = el('hostBtn');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Meminta Akses...';
+      btn.disabled = true;
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+          throw new Error("UNSUPPORTED_BROWSER");
+        }
+        
+        // Meminta akses tangkapan layar langsung
+        localStream = await navigator.mediaDevices.getDisplayMedia({ 
+          video: { cursor: "always" }, 
+          audio: { echoCancellation: true, noiseSuppression: true } 
+        });
+
+      } catch (err) {
+        console.error("Gagal mendapatkan akses layar:", err);
+        let errorMsg = 'Gagal memulai: Akses Layar dibatalkan atau diblokir.';
+        
+        // Cek secara spesifik mengapa gagal
+        if (err.message === "UNSUPPORTED_BROWSER") {
+          errorMsg = "Perangkat Anda (seperti HP) atau browser ini tidak mendukung fitur Berbagi Layar. Anda hanya bisa menggunakan tombol 'Gabung Menonton'. Gunakan Laptop/PC untuk membagikan layar.";
+        } else if (err.name === 'NotAllowedError') {
+          // Deteksi apakah sedang jalan di dalam iFrame (termasuk GAS)
+          if (window.self !== window.top) {
+             errorMsg = "Akses diblokir karena berjalan di dalam iFrame (seperti Google Apps Script/Canvas). Hosting seperti ini menolak fitur berbagi layar. Anda harus melakukan Deploy ke Cloudflare Pages, Netlify, atau Vercel.";
+          } else {
+             errorMsg = "Akses ditolak. Anda sepertinya menekan 'Batal' atau browser memblokir izin tangkapan layar.";
+          }
+        }
+
+        alert(errorMsg);
+        btn.innerHTML = '<i class="fa-solid fa-desktop"></i> Bagikan Layar Sekarang';
+        btn.disabled = false;
+        return; // Hentikan proses
+      }
+
+      // Mulai buat ruangan jika berhasil mendapatkan layar
+      try {
+        const roomId = 'NONTON-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        
+        peer = new Peer(roomId, peerOptions);
+        setupCallHandler();
+
+        peer.on('open', (id) => {
+          isHost = true;
+          showRoomUI(id, true);
+          setStatus('Menunggu teman bergabung...', 'bg-yellow-400');
+          
+          videoPlayer.srcObject = localStream;
+          videoPlayer.muted = true;
+        });
+
+        // Ketika Guest terhubung ke obrolan data
+        peer.on('connection', (connection) => {
+          conn = connection;
+          remotePeerId = conn.peer;
+          setupChatEvents();
+          setStatus('Teman terhubung! Sedang streaming.', 'bg-emerald-500');
+          el('chatParticipant').innerText = 'Teman Online';
+          
+          // Kirim layar ke Guest
+          mediaCall = peer.call(remotePeerId, localStream, { metadata: { type: 'screen' } });
+        });
+
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            alert('Berbagi layar dihentikan.');
+            leaveRoom();
+          };
+        }
+
+        // Tangani Error PeerJS
+        peer.on('error', (err) => {
+          console.error("PeerJS Host Error:", err);
+          alert('Kesalahan jaringan Host: ' + err.message);
+        });
+
+      } catch (err) {
+        console.error(err);
+        alert('Gagal menginisialisasi ruangan. Periksa koneksi internet Anda.');
+        leaveRoom();
+      }
+    }
+
+    // --- Logika GUEST (Menonton Layar) ---
+    function joinRoom() {
+      let roomInput = el('roomInput').value.trim().toUpperCase();
+      if (!roomInput) return;
+      roomInput = roomInput.replace(/\s+/g, '');
+
+      const btn = el('joinBtn');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghubungkan...';
+      btn.disabled = true;
+
+      peer = new Peer(peerOptions);
+      setupCallHandler();
+
+      peer.on('open', () => {
+        isHost = false;
+        remotePeerId = roomInput;
+        
+        // Timeout diperpanjang ke 30 detik untuk jaringan HP seluler yang lambat
+        connTimeout = setTimeout(() => {
+          if (!conn || !conn.open) {
+            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih berada di dalam ruangan.');
+            leaveRoom();
+          }
+        }, 30000); 
+
+        // Hubungkan (menghapus parameter reliable:true karena sensitif terhadap packet drop di jaringan seluler 4G/5G)
+        conn = peer.connect(remotePeerId);
+        
+        conn.on('open', () => {
+          clearTimeout(connTimeout);
+          showRoomUI(roomInput, false);
+          setStatus('Terhubung! Menunggu aliran video...', 'bg-emerald-500');
+          el('chatParticipant').innerText = 'Host Online';
+          setupChatEvents();
+        });
+
+        conn.on('error', (err) => {
+          console.warn('Data connection error:', err);
+          // Tidak langsung memanggil leaveRoom() di sini agar tidak prematur putus jika terjadi drop sinyal kecil
+        });
+      });
+
+      // Penanganan Error Guest
+      peer.on('error', (err) => {
+        clearTimeout(connTimeout);
+        console.error("PeerJS Guest Error:", err);
+        
+        if (err.type === 'peer-unavailable') {
+          alert(`Ruangan "${roomInput}" tidak ditemukan! Pastikan Host masih membagikan layar dan ID benar.`);
+        } else if (err.type === 'network' || err.type === 'server-error') {
+          alert('Gagal menghubungi server penengah. Periksa koneksi internet Anda.');
+        } else {
+          alert('Terjadi kesalahan koneksi: ' + err.message);
+        }
+        leaveRoom();
+      });
+      
+      // Auto-reconnect ringan jika putus dari server STUN
+      peer.on('disconnected', () => {
+        console.log('Terputus dari server penengah. Mencoba menyambung kembali...');
+        peer.reconnect();
+      });
+    }
+
+    // --- Logika Live Chat (P2P Data Channel) ---
+    function setupChatEvents() {
+      chatInput.disabled = false;
+      sendBtn.disabled = false;
+      micBtn.disabled = false; // Buka akses nelpon setelah terhubung
+      chatMessages.innerHTML = '';
+
+      conn.on('data', (data) => {
+        appendMessage(data.text, 'Teman', false);
+      });
+
+      // Tangani event saat koneksi benar-benar ditutup
+      conn.on('close', () => {
+        setStatus('Teman terputus atau keluar.', 'bg-red-500');
+        el('chatParticipant').innerText = 'Offline';
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
+        micBtn.disabled = true;
+        if(myMicStream) toggleMic(); // Matikan mic otomatis
+      });
+    }
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text || !conn || !conn.open) return;
+
+      conn.send({ text: text });
+      appendMessage(text, isHost ? 'Host (Anda)' : 'Guest (Anda)', true);
+      chatInput.value = '';
+    });
+
+    function appendMessage(text, sender, isMe) {
+      const align = isMe ? 'items-end' : 'items-start';
+      const bgColor = isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-gray-800 text-gray-200 rounded-tl-none';
+      
+      const msgHtml = `
+        <div class="flex flex-col ${align} animate-fade-in">
+          <span class="text-[10px] text-gray-500 mb-1 px-1">${sender}</span>
+          <div class="px-3 py-2 rounded-lg max-w-[85%] text-sm shadow-sm ${bgColor} break-words">
+            ${text}
+          </div>
+        </div>
+      `;
+      chatMessages.insertAdjacentHTML('beforeend', msgHtml);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // --- Keluar Ruangan & Pembersihan ---
+    function leaveRoom() {
+      if (connTimeout) clearTimeout(connTimeout);
+      if (mediaCall) mediaCall.close();
+      if (outgoingVoiceCall) outgoingVoiceCall.close();
+      if (conn) conn.close();
+      if (peer) peer.destroy();
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      if (myMicStream) myMicStream.getTracks().forEach(track => track.stop());
+      
+      remotePeerId = null;
+      
+      // Reset UI
+      viewRoom.classList.add('hidden');
+      roomControls.classList.add('hidden');
+      warningNotice.classList.add('hidden');
+      viewLobby.classList.remove('hidden');
+      videoPlayer.srcObject = null;
+      voicePlayer.srcObject = null;
+      
+      el('hostBtn').innerHTML = '<i class="fa-solid fa-desktop"></i> Bagikan Layar Sekarang';
+      el('hostBtn').disabled = false;
+      el('joinBtn').innerHTML = '<i class="fa-solid fa-play"></i> Gabung Menonton';
+      el('joinBtn').disabled = false;
+      el('roomInput').value = '';
+      
+      chatInput.disabled = true;
+      sendBtn.disabled = true;
+      micBtn.disabled = true;
+      micIcon.className = 'fa-solid fa-microphone-slash text-red-400 text-xs';
+      micBtn.classList.remove('bg-emerald-600');
+      micBtn.classList.add('bg-gray-800');
+
+      el('chatParticipant').innerText = 'Offline';
+      chatMessages.innerHTML = '<div class="text-center text-gray-500 text-sm mt-2 italic">Belum ada obrolan.</div>';
+    }
+
+  </script>
+</body>
+</html>
