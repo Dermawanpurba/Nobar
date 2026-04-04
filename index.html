@@ -11,9 +11,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- PeerJS -->
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  <!-- YouTube IFrame API -->
-  <script src="https://www.youtube.com/iframe_api"></script>
-
+  
   <style>
     #chatMessages::-webkit-scrollbar { width: 6px; }
     #chatMessages::-webkit-scrollbar-track { background: transparent; }
@@ -200,10 +198,15 @@
     const placeholderText = el('placeholderText');
     const guestOverlay = el('guestOverlay');
 
-    // --- Inisialisasi YouTube API ---
-    function onYouTubeIframeAPIReady() {
+    // --- Inisialisasi YouTube API (Dimuat Secara Dinamis) ---
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    window.onYouTubeIframeAPIReady = function() {
       isAPIReady = true;
-    }
+    };
 
     function initYouTubePlayer(videoId) {
       if (ytPlayer) {
