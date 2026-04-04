@@ -159,28 +159,17 @@
     let remotePeerId = null; // ID tujuan (Teman kita)
     let connTimeout = null;
 
-    // Konfigurasi Server Diperkuat (Solusi Beda Jaringan/HP)
+    // Konfigurasi Server Diperkuat (Optimal untuk Safari/iOS)
     const peerOptions = {
       debug: 2, 
+      secure: true, // Memaksa HTTPS untuk signaling (Penting untuk iOS Safari)
       config: {
         'iceServers': [
+          { urls: 'stun:stun.cloudflare.com:3478' }, // Cloudflare STUN (Sangat andal)
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+          // Menghapus TURN meter.ca karena sering timeout dan menyebabkan Safari hang
         ]
       }
     };
@@ -417,14 +406,15 @@
         isHost = false;
         remotePeerId = roomInput;
         
+        // Timeout diperpanjang
         connTimeout = setTimeout(() => {
           if (!conn || !conn.open) {
             alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih berada di dalam ruangan (Atau jaringan Anda memblokir koneksi P2P).');
             leaveRoom();
           }
-        }, 30000); 
+        }, 40000); 
 
-        // Solusi Chat Freeze: Menghapus { reliable: true } agar jalur data tidak macet saat koneksi seluler tidak stabil
+        // Hubungkan ke Host
         conn = peer.connect(remotePeerId); 
         
         conn.on('open', () => {
