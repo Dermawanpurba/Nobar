@@ -28,18 +28,24 @@
       <h1 class="text-xl font-bold tracking-tight">NontonBareng</h1>
     </div>
     
-    <!-- Kontrol Ruangan (Sembunyi di Lobby) -->
-    <div id="roomControls" class="hidden flex items-center gap-4">
-      <div class="bg-gray-800 px-3 py-1.5 rounded-md text-sm flex items-center gap-2 border border-gray-700">
-        <span class="text-gray-400">ID Ruangan:</span>
-        <span id="roomIdDisplay" class="font-mono font-bold text-indigo-400 select-all">---</span>
-        <button onclick="copyRoomId()" class="text-gray-400 hover:text-white transition-colors" title="Salin ID">
-          <i class="fa-regular fa-copy"></i>
+    <!-- Kontrol Ruangan & Pengaturan -->
+    <div class="flex items-center gap-4">
+      <button onclick="toggleSettings()" class="text-gray-400 hover:text-white transition-colors" title="Pengaturan Jaringan">
+        <i class="fa-solid fa-gear text-lg"></i>
+      </button>
+      
+      <div id="roomControls" class="hidden flex items-center gap-4">
+        <div class="bg-gray-800 px-3 py-1.5 rounded-md text-sm flex items-center gap-2 border border-gray-700">
+          <span class="text-gray-400 hidden md:inline">ID Ruangan:</span>
+          <span id="roomIdDisplay" class="font-mono font-bold text-indigo-400 select-all">---</span>
+          <button onclick="copyRoomId()" class="text-gray-400 hover:text-white transition-colors" title="Salin ID">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        </div>
+        <button onclick="leaveRoom()" class="flex items-center gap-2 bg-red-600/90 hover:bg-red-600 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden md:inline">Keluar</span>
         </button>
       </div>
-      <button onclick="leaveRoom()" class="flex items-center gap-2 bg-red-600/90 hover:bg-red-600 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
-      </button>
     </div>
   </header>
 
@@ -142,6 +148,42 @@
       </div>
     </div>
 
+    <!-- Modal Pengaturan (Custom TURN Server) -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div class="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-800/50">
+          <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-network-wired text-indigo-400"></i> Pengaturan Jaringan</h3>
+          <button onclick="toggleSettings()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-sm text-indigo-200">
+            <p>Jika HP Anda gagal menembus jaringan P2P (Waktu Habis) saat memakai koneksi seluler, atur <b>Relay TURN Server Privat</b> di bawah ini. Anda bisa mendapatkannya gratis di <i>metered.ca/stun-turn</i>.</p>
+          </div>
+          
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">TURN Server URL</label>
+              <input type="text" id="turnUrl" placeholder="turn:xxx.metered.ca:443" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:border-indigo-500 outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Username</label>
+                <input type="text" id="turnUser" placeholder="Username" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:border-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Credential (Password)</label>
+                <input type="password" id="turnPass" placeholder="Password" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:border-indigo-500 outline-none">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="p-5 border-t border-gray-800 flex justify-end gap-3 bg-gray-800/30">
+          <button onclick="clearTURN()" class="px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors font-medium">Hapus Data</button>
+          <button onclick="saveTURN()" class="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium shadow-lg">Simpan & Terapkan</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Pemutar Audio tersembunyi untuk panggilan suara -->
     <audio id="voicePlayer" autoplay class="hidden"></audio>
 
@@ -159,24 +201,40 @@
     let remotePeerId = null; // ID tujuan (Teman kita)
     let connTimeout = null;
 
-    // Konfigurasi Server Diperkuat: 
-    // Menghapus TURN meter.ca yang sering down/hang, murni menggunakan STUN tangguh.
-    const peerOptions = {
-      debug: 2, 
-      secure: true, // Memaksa HTTPS (Penting untuk iOS Safari & Cloudflare)
-      pingInterval: 5000, // Mencegah koneksi terputus tiba-tiba karena idle (Tidur)
-      config: {
-        'iceServers': [
-          { urls: 'stun:stun.cloudflare.com:3478' }, // Server Cloudflare (Paling cepat & tangguh)
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
+    // --- Manajemen TURN Server Kustom ---
+    function getIceServers() {
+      // Server dasar yang selalu ada (STUN yang andal)
+      const servers = [
+        { urls: 'stun:stun.cloudflare.com:3478' }, 
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+
+      // Ambil TURN privat jika user menyimpannya
+      const turnUrl = localStorage.getItem('wp_turnUrl');
+      const turnUser = localStorage.getItem('wp_turnUser');
+      const turnPass = localStorage.getItem('wp_turnPass');
+
+      if (turnUrl && turnUser && turnPass) {
+        servers.push({
+          urls: turnUrl,
+          username: turnUser,
+          credential: turnPass
+        });
       }
-    };
+      return servers;
+    }
+
+    function getPeerOptions() {
+      return {
+        debug: 2, 
+        secure: true, 
+        pingInterval: 5000, 
+        config: {
+          iceServers: getIceServers()
+        }
+      };
+    }
 
     // --- Referensi Elemen DOM ---
     const el = (id) => document.getElementById(id);
@@ -195,6 +253,45 @@
     const micBtn = el('micBtn');
     const micIcon = el('micIcon');
     const guestNotice = el('guestNotice');
+    const settingsModal = el('settingsModal');
+
+    // --- Modals & Settings UI ---
+    function toggleSettings() {
+      if (settingsModal.classList.contains('hidden')) {
+        el('turnUrl').value = localStorage.getItem('wp_turnUrl') || '';
+        el('turnUser').value = localStorage.getItem('wp_turnUser') || '';
+        el('turnPass').value = localStorage.getItem('wp_turnPass') || '';
+        settingsModal.classList.remove('hidden');
+      } else {
+        settingsModal.classList.add('hidden');
+      }
+    }
+
+    function saveTURN() {
+      const url = el('turnUrl').value.trim();
+      const user = el('turnUser').value.trim();
+      const pass = el('turnPass').value.trim();
+      
+      if (url && user && pass) {
+        localStorage.setItem('wp_turnUrl', url);
+        localStorage.setItem('wp_turnUser', user);
+        localStorage.setItem('wp_turnPass', pass);
+        alert('Server TURN Privat berhasil disimpan! Koneksi jaringan seluler HP kini akan lebih stabil.');
+      } else {
+        alert('Harap isi semua kolom, atau gunakan tombol Hapus Data.');
+      }
+      toggleSettings();
+    }
+
+    function clearTURN() {
+      localStorage.removeItem('wp_turnUrl');
+      localStorage.removeItem('wp_turnUser');
+      localStorage.removeItem('wp_turnPass');
+      el('turnUrl').value = '';
+      el('turnUser').value = '';
+      el('turnPass').value = '';
+      alert('Data TURN dihapus. Aplikasi akan menggunakan server STUN standar (Mungkin diblokir oleh beberapa operator seluler).');
+    }
 
     // --- Utilitas UI ---
     function setStatus(text, color = 'bg-indigo-500') {
@@ -359,7 +456,7 @@
       try {
         const roomId = 'NONTON-' + Math.random().toString(36).substring(2, 6).toUpperCase();
         
-        peer = new Peer(roomId, peerOptions);
+        peer = new Peer(roomId, getPeerOptions());
         setupCallHandler();
 
         peer.on('open', (id) => {
@@ -431,7 +528,7 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghubungkan...';
       btn.disabled = true;
 
-      peer = new Peer(peerOptions);
+      peer = new Peer(getPeerOptions());
       setupCallHandler();
 
       peer.on('open', () => {
@@ -441,7 +538,12 @@
         // Timeout diperpanjang hingga 45 detik
         connTimeout = setTimeout(() => {
           if (!conn || !conn.open) {
-            alert('Waktu habis! Gagal menembus jaringan P2P. Pastikan koneksi internet stabil atau Host masih di dalam ruangan.');
+            const hasTurn = localStorage.getItem('wp_turnUrl');
+            if(hasTurn) {
+               alert('Waktu habis! Server TURN Kustom mungkin tidak valid atau Host sudah keluar ruangan.');
+            } else {
+               alert('Waktu habis gagal menembus jaringan P2P! Solusi:\n1. Hubungkan HP Anda ke Wi-Fi\n2. Klik ikon PENGATURAN (Gear) di pojok kanan atas untuk menambah Server TURN.');
+            }
             leaveRoom();
           }
         }, 45000); 
