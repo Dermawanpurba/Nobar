@@ -159,17 +159,31 @@
     let remotePeerId = null; // ID tujuan (Teman kita)
     let connTimeout = null;
 
-    // Konfigurasi Server Diperkuat (Optimal untuk Safari/iOS)
+    // Konfigurasi Server Diperkuat (Tembus NAT HP Seluler & Anti-Idle)
     const peerOptions = {
       debug: 2, 
-      secure: true, // Memaksa HTTPS untuk signaling (Penting untuk iOS Safari)
+      secure: true, // Memaksa HTTPS (Penting untuk iOS Safari & Cloudflare)
+      pingInterval: 5000, // Mencegah koneksi terputus tiba-tiba karena idle (Tidur)
       config: {
         'iceServers': [
-          { urls: 'stun:stun.cloudflare.com:3478' }, // Cloudflare STUN (Sangat andal)
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-          // Menghapus TURN meter.ca karena sering timeout dan menyebabkan Safari hang
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          // Relay Servers (TURN) mutlak diperlukan untuk perangkat HP yang ketat firewall-nya
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
         ]
       }
     };
@@ -322,7 +336,6 @@
         console.error("Gagal mendapatkan akses layar:", err);
         let errorMsg = 'Gagal memulai: Akses Layar dibatalkan atau diblokir.';
         
-        // Cek secara spesifik mengapa gagal
         if (err.message === "UNSUPPORTED_BROWSER") {
           errorMsg = "Perangkat Anda (seperti HP) atau browser ini tidak mendukung fitur Berbagi Layar. Anda hanya bisa menggunakan tombol 'Gabung Menonton'. Gunakan Laptop/PC untuk membagikan layar.";
         } else if (err.name === 'NotAllowedError') {
@@ -376,6 +389,12 @@
           };
         }
 
+        // Host Auto-Reconnect jika koneksi signaling "Tertidur"
+        peer.on('disconnected', () => {
+          console.warn("Koneksi Host ke server pusat terputus. Mencoba menyambung kembali...");
+          peer.reconnect();
+        });
+
         // Tangani Error PeerJS
         peer.on('error', (err) => {
           console.error("PeerJS Host Error:", err);
@@ -391,9 +410,9 @@
 
     // --- Logika GUEST (Menonton Layar) ---
     function joinRoom() {
-      let roomInput = el('roomInput').value.trim().toUpperCase();
+      // Pembersihan dan Formatting ID Ruangan agar lebih stabil
+      let roomInput = el('roomInput').value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
       if (!roomInput) return;
-      roomInput = roomInput.replace(/\s+/g, '');
 
       const btn = el('joinBtn');
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghubungkan...';
@@ -406,15 +425,15 @@
         isHost = false;
         remotePeerId = roomInput;
         
-        // Timeout diperpanjang
+        // Timeout diperpanjang hingga 40 detik
         connTimeout = setTimeout(() => {
           if (!conn || !conn.open) {
-            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih berada di dalam ruangan (Atau jaringan Anda memblokir koneksi P2P).');
+            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih ada di dalam ruangan.');
             leaveRoom();
           }
         }, 40000); 
 
-        // Hubungkan ke Host
+        // Hubungkan ke Host (Mengirim Sinyal Panggilan)
         conn = peer.connect(remotePeerId); 
         
         conn.on('open', () => {
@@ -436,7 +455,7 @@
         console.error("PeerJS Guest Error:", err);
         
         if (err.type === 'peer-unavailable') {
-          alert(`Ruangan "${roomInput}" tidak ditemukan! Pastikan Host masih membagikan layar dan ID benar.`);
+          alert(`Ruangan "${roomInput}" tidak ditemukan! Pastikan Host masih online.`);
         } else if (err.type === 'network' || err.type === 'server-error') {
           alert('Gagal menghubungi server penengah. Periksa koneksi internet Anda.');
         } else {
