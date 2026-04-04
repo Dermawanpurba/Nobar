@@ -166,7 +166,9 @@
       pingInterval: 5000, // Mencegah koneksi terputus tiba-tiba karena idle (Tidur)
       config: {
         'iceServers': [
+          { urls: 'stun:stun.cloudflare.com:3478' }, // Server Cloudflare (Paling cepat & tangguh)
           { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:global.stun.twilio.com:3478' },
           // Relay Servers (TURN) mutlak diperlukan untuk perangkat HP yang ketat firewall-nya
           {
@@ -369,16 +371,27 @@
           videoPlayer.play().catch(e => console.log(e));
         });
 
-        // Ketika Guest terhubung ke obrolan data
+        // Ketika Guest menginisiasi Panggilan Data Channel
         peer.on('connection', (connection) => {
           conn = connection;
           remotePeerId = conn.peer;
-          setupChatEvents();
-          setStatus('Teman terhubung! Sedang streaming.', 'bg-emerald-500');
-          el('chatParticipant').innerText = 'Teman Online';
           
-          // Kirim layar ke Guest
-          mediaCall = peer.call(remotePeerId, localStream, { metadata: { type: 'screen' } });
+          setStatus('Menegosiasikan jalur P2P dengan teman...', 'bg-yellow-400');
+          
+          // BUG FIX: Host HARUS menunggu sampai jalur DataChannel (conn) benar-benar TERBUKA
+          // sebelum menyimpulkan teman sudah terhubung dan mengirimkan Layar
+          conn.on('open', () => {
+            setupChatEvents();
+            setStatus('Teman terhubung! Sedang streaming.', 'bg-emerald-500');
+            el('chatParticipant').innerText = 'Teman Online';
+            
+            // Kirim layar ke Guest HANYA JIKA koneksi sudah stabil menembus NAT
+            mediaCall = peer.call(remotePeerId, localStream, { metadata: { type: 'screen' } });
+          });
+          
+          conn.on('error', (err) => {
+            console.warn("Koneksi P2P Gagal terbuka:", err);
+          });
         });
 
         const videoTrack = localStream.getVideoTracks()[0];
@@ -425,19 +438,19 @@
         isHost = false;
         remotePeerId = roomInput;
         
-        // Timeout diperpanjang hingga 40 detik
+        // Timeout diperpanjang hingga 45 detik
         connTimeout = setTimeout(() => {
           if (!conn || !conn.open) {
-            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih ada di dalam ruangan.');
+            alert('Waktu habis! Gagal menembus jaringan P2P. Pastikan koneksi internet stabil atau Host masih di dalam ruangan.');
             leaveRoom();
           }
-        }, 40000); 
+        }, 45000); 
 
-        // Hubungkan ke Host (Mengirim Sinyal Panggilan)
+        // Hubungkan ke Host (Mengirim Sinyal Panggilan P2P)
         conn = peer.connect(remotePeerId); 
         
         conn.on('open', () => {
-          clearTimeout(connTimeout);
+          clearTimeout(connTimeout); // Berhasil menembus! Matikan hitung mundur
           showRoomUI(roomInput, false);
           setStatus('Terhubung! Menunggu aliran video...', 'bg-emerald-500');
           el('chatParticipant').innerText = 'Host Online';
