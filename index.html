@@ -106,9 +106,9 @@
         
         <video id="videoPlayer" autoplay playsinline class="w-full h-full object-contain"></video>
         
-        <div id="guestNotice" class="hidden absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-300 bg-black/80 px-4 py-2 rounded-full shadow-lg border border-gray-700 backdrop-blur-sm cursor-pointer" onclick="document.getElementById('videoPlayer').play()">
-          <i class="fa-solid fa-volume-high mr-1"></i> Klik area ini jika video/suara belum muncul
-        </div>
+        <button id="guestNotice" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-white bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-full shadow-2xl border border-indigo-400 backdrop-blur-sm transition-all z-20 font-bold flex items-center gap-2" onclick="forcePlayVideo()">
+          <i class="fa-solid fa-play"></i> Tap di sini untuk melihat Layar
+        </button>
       </div>
 
       <!-- Area Chat & Voice -->
@@ -159,17 +159,28 @@
     let remotePeerId = null; // ID tujuan (Teman kita)
     let connTimeout = null;
 
-    // Konfigurasi Server Diperkuat (Solusi Beda Jaringan)
+    // Konfigurasi Server Diperkuat (Solusi Beda Jaringan/HP)
     const peerOptions = {
       debug: 2, 
       config: {
         'iceServers': [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' } // Fallback kuat
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
         ]
       }
     };
@@ -190,6 +201,7 @@
     const warningNotice = el('warningNotice');
     const micBtn = el('micBtn');
     const micIcon = el('micIcon');
+    const guestNotice = el('guestNotice');
 
     // --- Utilitas UI ---
     function setStatus(text, color = 'bg-indigo-500') {
@@ -202,10 +214,6 @@
       viewRoom.classList.remove('hidden');
       roomControls.classList.remove('hidden');
       el('roomIdDisplay').innerText = roomIdText;
-      
-      if (!isHosting) {
-        el('guestNotice').classList.remove('hidden');
-      }
     }
 
     function copyRoomId() {
@@ -223,6 +231,15 @@
       });
     }
 
+    function forcePlayVideo() {
+      videoPlayer.muted = false;
+      videoPlayer.play().then(() => {
+        guestNotice.classList.add('hidden');
+      }).catch(err => {
+        console.error("Gagal memutar video secara manual:", err);
+      });
+    }
+
     // --- Handler Panggilan (Layar & Suara) ---
     function setupCallHandler() {
       peer.on('call', (call) => {
@@ -231,15 +248,28 @@
           call.answer(); // Angkat telepon suara otomatis
           call.on('stream', (remoteAudioStream) => {
             voicePlayer.srcObject = remoteAudioStream;
+            voicePlayer.play().catch(e => console.log('Auto-play audio ditolak', e));
           });
         } 
         // Jika bukan, berarti ini kiriman layar (Screen Share)
         else {
           mediaCall = call;
           call.answer(); // Guest menjawab screen share
+          
           call.on('stream', (remoteVideoStream) => {
             videoPlayer.srcObject = remoteVideoStream;
-            videoPlayer.muted = false; // Guest harus mendengar suara layar
+            videoPlayer.muted = false; 
+            
+            // Solusi Layar Hitam: Memaksa browser HP untuk memutar video
+            let playPromise = videoPlayer.play();
+            if (playPromise !== undefined) {
+              playPromise.then(() => {
+                guestNotice.classList.add('hidden'); // Jika berhasil, sembunyikan tombol
+              }).catch(error => {
+                console.warn("Auto-play dicegah oleh browser HP. Menampilkan tombol play manual.", error);
+                guestNotice.classList.remove('hidden'); // Jika gagal (layar hitam), tampilkan tombol Tap
+              });
+            }
           });
         }
       });
@@ -307,9 +337,8 @@
         if (err.message === "UNSUPPORTED_BROWSER") {
           errorMsg = "Perangkat Anda (seperti HP) atau browser ini tidak mendukung fitur Berbagi Layar. Anda hanya bisa menggunakan tombol 'Gabung Menonton'. Gunakan Laptop/PC untuk membagikan layar.";
         } else if (err.name === 'NotAllowedError') {
-          // Deteksi apakah sedang jalan di dalam iFrame (termasuk GAS)
           if (window.self !== window.top) {
-             errorMsg = "Akses diblokir karena berjalan di dalam iFrame (seperti Google Apps Script/Canvas). Hosting seperti ini menolak fitur berbagi layar. Anda harus melakukan Deploy ke Cloudflare Pages, Netlify, atau Vercel.";
+             errorMsg = "Akses diblokir karena berjalan di dalam iFrame. Hosting ini menolak fitur berbagi layar. Anda harus melakukan Deploy ke Cloudflare Pages, Netlify, atau Vercel.";
           } else {
              errorMsg = "Akses ditolak. Anda sepertinya menekan 'Batal' atau browser memblokir izin tangkapan layar.";
           }
@@ -335,6 +364,7 @@
           
           videoPlayer.srcObject = localStream;
           videoPlayer.muted = true;
+          videoPlayer.play().catch(e => console.log(e));
         });
 
         // Ketika Guest terhubung ke obrolan data
@@ -387,16 +417,15 @@
         isHost = false;
         remotePeerId = roomInput;
         
-        // Timeout diperpanjang ke 30 detik untuk jaringan HP seluler yang lambat
         connTimeout = setTimeout(() => {
           if (!conn || !conn.open) {
-            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih berada di dalam ruangan.');
+            alert('Waktu habis! Gagal terhubung ke ruangan. Pastikan ID benar dan Host masih berada di dalam ruangan (Atau jaringan Anda memblokir koneksi P2P).');
             leaveRoom();
           }
         }, 30000); 
 
-        // Hubungkan (menghapus parameter reliable:true karena sensitif terhadap packet drop di jaringan seluler 4G/5G)
-        conn = peer.connect(remotePeerId);
+        // Solusi Chat Freeze: Menghapus { reliable: true } agar jalur data tidak macet saat koneksi seluler tidak stabil
+        conn = peer.connect(remotePeerId); 
         
         conn.on('open', () => {
           clearTimeout(connTimeout);
@@ -408,7 +437,6 @@
 
         conn.on('error', (err) => {
           console.warn('Data connection error:', err);
-          // Tidak langsung memanggil leaveRoom() di sini agar tidak prematur putus jika terjadi drop sinyal kecil
         });
       });
 
@@ -427,7 +455,6 @@
         leaveRoom();
       });
       
-      // Auto-reconnect ringan jika putus dari server STUN
       peer.on('disconnected', () => {
         console.log('Terputus dari server penengah. Mencoba menyambung kembali...');
         peer.reconnect();
@@ -461,6 +488,7 @@
       const text = chatInput.value.trim();
       if (!text || !conn || !conn.open) return;
 
+      // Kirim lewat jalur data yang tidak ketat agar tidak freeze
       conn.send({ text: text });
       appendMessage(text, isHost ? 'Host (Anda)' : 'Guest (Anda)', true);
       chatInput.value = '';
@@ -498,6 +526,7 @@
       viewRoom.classList.add('hidden');
       roomControls.classList.add('hidden');
       warningNotice.classList.add('hidden');
+      guestNotice.classList.add('hidden');
       viewLobby.classList.remove('hidden');
       videoPlayer.srcObject = null;
       voicePlayer.srcObject = null;
