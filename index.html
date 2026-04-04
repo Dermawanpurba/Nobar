@@ -316,10 +316,23 @@
           throw new Error("UNSUPPORTED_BROWSER");
         }
         
-        // Meminta akses tangkapan layar langsung
+        // MENGADOPSI PENGATURAN KUALITAS DARI KODE REFERENSI:
+        // Mematikan EchoCancellation agar suara film/musik stereo jernih (tidak diredam)
+        // Memaksa resolusi logis agar stream stabil
         localStream = await navigator.mediaDevices.getDisplayMedia({ 
-          video: { cursor: "always" }, 
-          audio: { echoCancellation: true, noiseSuppression: true } 
+          video: { 
+            height: 720, 
+            logicalSurface: true,
+            cursor: "always" 
+          }, 
+          audio: { 
+            autoGainControl: false,
+            channelCount: 2,
+            echoCancellation: false,
+            noiseSuppression: false,
+            sampleRate: 48000,
+            sampleSize: 16
+          } 
         });
 
       } catch (err) {
@@ -366,8 +379,7 @@
           
           setStatus('Menegosiasikan jalur P2P dengan teman...', 'bg-yellow-400');
           
-          // BUG FIX: Host HARUS menunggu sampai jalur DataChannel (conn) benar-benar TERBUKA
-          // sebelum menyimpulkan teman sudah terhubung dan mengirimkan Layar
+          // Host HARUS menunggu sampai jalur DataChannel (conn) benar-benar TERBUKA
           conn.on('open', () => {
             setupChatEvents();
             setStatus('Teman terhubung! Sedang streaming.', 'bg-emerald-500');
