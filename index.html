@@ -4,542 +4,364 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Watch Party</title>
-  <!-- Tailwind CSS -->
+  <title>Nonton Bareng Premium</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- PeerJS -->
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  
-  <style>
-    #chatMessages::-webkit-scrollbar { width: 6px; }
-    #chatMessages::-webkit-scrollbar-track { background: transparent; }
-    #chatMessages::-webkit-scrollbar-thumb { background-color: #374151; border-radius: 10px; }
-    /* Mematikan klik pada video untuk Guest agar sinkronisasi tidak rusak */
-    .guest-video-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: not-allowed; }
-  </style>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans min-h-screen flex flex-col">
 
-  <!-- Header -->
-  <header class="bg-red-700 border-b border-red-800 p-4 flex items-center justify-between shadow-md">
+  <script>
+    const BACKEND_URL = "https://backend-anda.onrender.com"; // <--- GANTI INI
+  </script>
+
+  <header class="bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between shadow-md">
     <div class="flex items-center gap-3">
-      <i class="fa-brands fa-youtube text-white text-2xl"></i>
-      <h1 class="text-xl font-bold tracking-tight text-white">YT Watch Party</h1>
+      <i class="fa-solid fa-clapperboard text-indigo-500 text-xl"></i>
+      <h1 class="text-xl font-bold tracking-tight">Nobar Premium</h1>
     </div>
-    
     <div id="roomControls" class="hidden flex items-center gap-4">
-      <div class="bg-red-900/50 px-3 py-1.5 rounded-md text-sm flex items-center gap-2 border border-red-600/50">
-        <span class="text-red-200 hidden md:inline">ID Ruangan:</span>
-        <span id="roomIdDisplay" class="font-mono font-bold text-white select-all">---</span>
-        <button onclick="copyRoomId()" class="text-red-200 hover:text-white transition-colors" title="Salin ID">
-          <i class="fa-regular fa-copy"></i>
-        </button>
+      <div class="bg-gray-800 px-3 py-1.5 rounded-md text-sm flex items-center gap-2 border border-gray-700">
+        <span class="text-gray-400">ID:</span>
+        <span id="roomIdDisplay" class="font-mono font-bold text-indigo-400">---</span>
       </div>
-      <button onclick="leaveRoom()" class="flex items-center gap-2 bg-gray-900 hover:bg-black text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shadow-sm">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden md:inline">Keluar</span>
-      </button>
+      <button onclick="window.location.reload()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-sm rounded-md transition-colors">Keluar</button>
     </div>
   </header>
 
-  <main class="flex-1 relative flex flex-col h-[calc(100vh-68px)]">
+  <main class="flex-1 relative flex flex-col h-[calc(100vh-65px)]">
     
-    <!-- ================= VIEW LOBBY ================= -->
     <div id="lobbyView" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
-      <div class="max-w-4xl w-full grid md:grid-cols-2 gap-8">
+      <div class="max-w-5xl w-full grid md:grid-cols-2 gap-8">
         
-        <!-- Buat Ruangan (Host) -->
-        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
-          <div class="bg-red-500/10 p-5 rounded-full mb-6">
-            <i class="fa-brands fa-youtube text-4xl text-red-500"></i>
-          </div>
-          <h2 class="text-2xl font-bold mb-2">Buat Ruangan Nobar</h2>
-          <p class="text-gray-400 mb-8 text-sm leading-relaxed">Jadilah Tuan Rumah (Host). Anda yang akan memilih video YouTube dan mengontrol Play/Pause untuk semua orang.</p>
+        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl flex flex-col gap-4">
+          <h2 class="text-xl font-bold text-center border-b border-gray-800 pb-3">Buat Ruangan (Host)</h2>
           
-          <button id="hostBtn" onclick="startHosting()" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-900/20">
-            <i class="fa-solid fa-plus"></i> Buat Ruangan
+          <button onclick="startHosting('youtube')" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg flex items-center justify-center gap-2">
+            <i class="fa-brands fa-youtube text-xl"></i> Mode YouTube Sync (Ringan)
+          </button>
+          
+          <div class="bg-gray-800/50 p-4 rounded-lg text-sm text-gray-400 border border-gray-700">
+            <p class="mb-2"><strong class="text-indigo-400"><i class="fa-solid fa-tv"></i> Mode Netflix / Layar PC:</strong></p>
+            <p class="text-xs">Wajib mematikan "Hardware Acceleration" di pengaturan Chrome/Edge agar layar Netflix tidak hitam.</p>
+          </div>
+          <button onclick="startHosting('screen')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg flex items-center justify-center gap-2">
+            <i class="fa-solid fa-desktop text-xl"></i> Mode Bagikan Layar
           </button>
         </div>
 
-        <!-- Gabung Ruangan (Guest) -->
-        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
-          <div class="bg-emerald-500/10 p-5 rounded-full mb-6">
-            <i class="fa-solid fa-users text-3xl text-emerald-500"></i>
-          </div>
-          <h2 class="text-2xl font-bold mb-2">Gabung ke Ruangan</h2>
-          <p class="text-gray-400 mb-8 text-sm leading-relaxed">Masukkan ID Ruangan teman Anda. Video di layar Anda akan otomatis mengikuti video milik Host.</p>
-          
-          <div class="w-full flex flex-col gap-3">
-            <input type="text" id="roomInput" placeholder="Masukkan ID (Cth: YT-XYZ)" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-3 px-4 text-center font-mono text-lg uppercase focus:outline-none focus:border-red-500 transition-colors">
-            <button id="joinBtn" onclick="joinRoom()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
-              <i class="fa-solid fa-play"></i> Gabung Menonton
-            </button>
-          </div>
+        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl flex flex-col gap-4 justify-center">
+          <h2 class="text-xl font-bold text-center border-b border-gray-800 pb-3">Gabung Ruangan</h2>
+          <input type="text" id="roomInput" placeholder="Masukkan ID Ruangan" class="w-full bg-gray-950 border border-gray-700 rounded-lg py-3 px-4 text-center font-mono uppercase outline-none focus:border-emerald-500">
+          <button onclick="joinRoom()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg flex items-center justify-center gap-2">
+            <i class="fa-solid fa-play"></i> Gabung Menonton
+          </button>
         </div>
 
       </div>
     </div>
 
-    <!-- ================= VIEW RUANGAN ================= -->
-    <div id="roomView" class="hidden flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+    <div id="roomView" class="hidden flex-1 flex flex-col md:flex-row h-full">
       
-      <!-- Area Video -->
-      <div class="flex-1 flex flex-col relative border-r border-gray-800 bg-black">
+      <div class="flex-1 bg-black flex flex-col relative border-r border-gray-800">
         
-        <!-- Bar Pencarian YouTube (Hanya untuk Host) -->
-        <div id="ytControlBar" class="hidden bg-gray-900 border-b border-gray-800 p-3 flex gap-2">
-          <input type="text" id="ytUrlInput" placeholder="Tempel Link YouTube di sini (Cth: https://youtu.be/...)" class="flex-1 bg-gray-950 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:border-red-500 outline-none transition-colors">
-          <button onclick="loadNewVideo()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            Putar Video
+        <div id="ytInputBar" class="hidden bg-gray-900 p-2 flex gap-2">
+          <input type="text" id="ytUrl" placeholder="Tempel Link YouTube..." class="flex-1 bg-gray-950 border border-gray-700 rounded px-3 text-sm outline-none">
+          <button onclick="loadYtVideo()" class="bg-red-600 px-4 text-sm rounded hover:bg-red-700">Putar</button>
+        </div>
+
+        <div class="relative w-full h-full flex items-center justify-center">
+          <div id="connectionStatus" class="absolute top-4 left-4 z-20 bg-black/70 px-3 py-1 rounded text-xs text-white">Menghubungkan ke server...</div>
+          
+          <div id="ytPlayerContainer" class="hidden w-full h-full pointer-events-auto z-10"></div>
+          <div id="guestOverlay" class="hidden absolute inset-0 z-20" title="Host yang mengontrol video"></div> <video id="screenVideo" autoplay playsinline class="hidden w-full h-full object-contain z-10"></video>
+          
+          <button id="mobilePlayBtn" class="hidden absolute z-30 bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg" onclick="forcePlay()">
+            <i class="fa-solid fa-play"></i> Tap untuk Memutar
           </button>
         </div>
-
-        <div class="absolute top-16 left-4 z-20 flex flex-col gap-2 pointer-events-none" id="statusOverlay">
-          <div class="bg-black/60 px-3 py-1.5 rounded text-sm text-white backdrop-blur-sm flex items-center gap-2 w-fit">
-            <div id="statusDot" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></div>
-            <span id="statusText">Menginisialisasi...</span>
-          </div>
-        </div>
-        
-        <!-- Wadah Pemutar YouTube -->
-        <div class="relative flex-1 w-full h-full bg-black">
-          <div id="ytPlayerContainer" class="w-full h-full pointer-events-auto"></div>
-          <!-- Overlay Guest: Mencegah guest mengklik play/pause agar tidak merusak sinkronisasi -->
-          <div id="guestOverlay" class="hidden guest-video-overlay" title="Hanya Host yang dapat mengontrol video"></div>
-          
-          <div id="placeholderVideo" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 pointer-events-none">
-            <i class="fa-brands fa-youtube text-6xl mb-4 opacity-50"></i>
-            <p id="placeholderText">Menunggu Host memutar video...</p>
-          </div>
-        </div>
-
       </div>
 
-      <!-- Area Chat -->
-      <div class="w-full md:w-80 lg:w-96 bg-gray-900 flex flex-col h-[40vh] md:h-full shrink-0">
-        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <i class="fa-regular fa-comments text-red-400"></i>
-            <h3 class="font-semibold">Live Chat</h3>
-          </div>
-          <span id="chatParticipant" class="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded border border-gray-700">Menunggu...</span>
-        </div>
-        
-        <!-- Daftar Pesan -->
-        <div id="chatMessages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scroll-smooth">
-          <div class="text-center text-gray-500 text-sm mt-2 italic">Ruangan obrolan siap.</div>
-        </div>
-
-        <!-- Input Chat -->
-        <form id="chatForm" class="p-3 border-t border-gray-800 flex gap-2 bg-gray-950">
-          <input type="text" id="chatInput" placeholder="Ketik pesan..." autocomplete="off" class="flex-1 bg-gray-900 border border-gray-700 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-red-500 transition-colors" disabled>
-          <button type="submit" id="sendBtn" class="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 text-white w-10 h-10 rounded-full transition-colors flex shrink-0 items-center justify-center shadow-sm" disabled>
-            <i class="fa-solid fa-paper-plane"></i>
+      <div class="w-full md:w-80 lg:w-96 bg-gray-900 flex flex-col h-64 md:h-full shrink-0">
+        <div class="p-4 border-b border-gray-800 font-semibold"><i class="fa-regular fa-comments text-indigo-400"></i> Live Chat</div>
+        <div id="chatMessages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3"></div>
+        <form id="chatForm" class="p-3 border-t border-gray-800 flex gap-2">
+          <input type="text" id="chatInput" placeholder="Ketik pesan..." class="flex-1 bg-gray-950 border border-gray-700 rounded-full px-3 text-sm outline-none" disabled>
+          <button type="submit" id="sendBtn" class="bg-indigo-600 w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50" disabled>
+            <i class="fa-solid fa-paper-plane text-white"></i>
           </button>
         </form>
       </div>
-    </div>
 
+    </div>
   </main>
 
   <script>
-    // --- Variabel Global ---
-    let peer = null;
-    let conn = null; // Koneksi Data P2P
+    let socket;
+    let roomId;
     let isHost = false;
-    let ytPlayer = null;
-    let currentVideoId = '';
-    let syncInterval = null;
-    let isAPIReady = false;
-    let blockHostEvents = false; // Mencegah loop sinkronisasi
+    let roomMode = ''; // 'youtube' atau 'screen'
     
-    // Konfigurasi STUN dan TURN Server
-    // Menggunakan TURN Metered.ca kembali agar dapat menembus jaringan seluler 4G/5G
-    const peerOptions = {
-      debug: 2, 
-      secure: true, 
-      config: {
-        'iceServers': [
-          { urls: 'stun:stun.cloudflare.com:3478' }, 
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
+    // YouTube Vars
+    let ytPlayer;
+    let currentYtId = '';
+    let hostSyncInterval;
+    let ignoreYtEvent = false;
+
+    // WebRTC Vars (Untuk Screen Share)
+    let localStream;
+    let peerConnections = {}; // Menyimpan koneksi ke semua guest
+
+    const iceServers = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' }
         ]
-      }
     };
 
-    // --- Referensi Elemen DOM ---
-    const el = (id) => document.getElementById(id);
-    const viewLobby = el('lobbyView');
-    const viewRoom = el('roomView');
-    const roomControls = el('roomControls');
-    const chatMessages = el('chatMessages');
-    const chatInput = el('chatInput');
-    const sendBtn = el('sendBtn');
-    const statusText = el('statusText');
-    const statusDot = el('statusDot');
-    const ytControlBar = el('ytControlBar');
-    const placeholderVideo = el('placeholderVideo');
-    const placeholderText = el('placeholderText');
-    const guestOverlay = el('guestOverlay');
-
-    // --- Inisialisasi YouTube API (Dimuat Secara Dinamis) ---
-    var tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-    window.onYouTubeIframeAPIReady = function() {
-      isAPIReady = true;
-    };
-
-    function initYouTubePlayer(videoId) {
-      if (ytPlayer) {
-        ytPlayer.loadVideoById(videoId);
-        return;
-      }
-      
-      placeholderVideo.classList.add('hidden');
-      
-      // Setup pemutar baru
-      ytPlayer = new YT.Player('ytPlayerContainer', {
-        height: '100%',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-          'autoplay': 1,
-          'controls': isHost ? 1 : 0, // Guest tidak punya control bar Youtube
-          'disablekb': isHost ? 0 : 1, // Disable keyboard untuk Guest
-          'rel': 0
-        },
-        events: {
-          'onReady': onPlayerReady,
-          'onStateChange': onPlayerStateChange
-        }
-      });
-    }
-
-    function onPlayerReady(event) {
-      if (!isHost) {
-        // Jika Guest membuka di HP, kadang butuh mute agar autoplay jalan
-        event.target.mute(); 
-        event.target.playVideo();
-        appendMessage('Sistem', 'Tap video untuk menyalakan suara jika masih bisu.', true);
-      }
-    }
-
-    // Mendeteksi aksi Host (Play/Pause/Buffer) lalu mengirim ke Guest
-    function onPlayerStateChange(event) {
-      if (!isHost || !conn || !conn.open || blockHostEvents) return;
-
-      const time = ytPlayer.getCurrentTime();
-
-      if (event.data == YT.PlayerState.PLAYING) {
-        sendSyncData('PLAY', time, currentVideoId);
-      } else if (event.data == YT.PlayerState.PAUSED) {
-        sendSyncData('PAUSE', time, currentVideoId);
-      } else if (event.data == YT.PlayerState.BUFFERING) {
-        sendSyncData('PAUSE', time, currentVideoId); // Pause guest saat host buffering
-      }
-    }
-
-    // --- Fungsi Sinkronisasi Data ---
-    function sendSyncData(command, time, videoId) {
-      if (conn && conn.open) {
-        conn.send({
-          type: 'SYNC',
-          command: command,
-          time: time,
-          videoId: videoId
+    // --- Inisialisasi Socket.io ---
+    function connectSocket(mode) {
+        socket = io(BACKEND_URL);
+        
+        socket.on('connect', () => {
+            document.getElementById('connectionStatus').innerText = "Terhubung ke Server ✅";
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            socket.emit('join-room', roomId, isHost);
         });
-      }
+
+        socket.on('disconnect', () => {
+            document.getElementById('connectionStatus').innerText = "Terputus ❌";
+        });
+
+        // Terima Chat
+        socket.on('chat-message', (msg) => {
+            appendChat(msg.text, msg.sender, false);
+        });
+
+        // Terima Perintah YouTube (Khusus Guest)
+        socket.on('sync-yt', (data) => {
+            if (isHost || roomMode !== 'youtube') return;
+            handleYtSync(data);
+        });
+
+        // Terima Sinyal WebRTC (Screen Share)
+        socket.on('webrtc-signal', async (data) => {
+            if (roomMode !== 'screen') return;
+            handleWebRTCSignal(data.from, data.signal);
+        });
+
+        // WebRTC: Saat Guest baru gabung, Host buatkan koneksi khusus untuk dia
+        socket.on('user-connected', async (userId) => {
+            appendChat('Seseorang bergabung ke ruangan.', 'Sistem', false);
+            if (isHost && roomMode === 'screen' && localStream) {
+                const pc = createPeerConnection(userId);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('webrtc-signal', { to: userId, signal: pc.localDescription });
+            } else if (isHost && roomMode === 'youtube' && currentYtId) {
+                // Beritahu guest baru video apa yang sedang diputar
+                socket.emit('sync-yt', { command: 'LOAD', videoId: currentYtId, time: ytPlayer.getCurrentTime() });
+            }
+        });
     }
 
-    function handleSyncData(data) {
-      if (!ytPlayer && data.videoId) {
-        currentVideoId = data.videoId;
-        initYouTubePlayer(data.videoId);
-      }
-      
-      if (!ytPlayer) return;
-
-      // Jika ada video baru diputar Host
-      if (data.videoId && data.videoId !== currentVideoId) {
-        currentVideoId = data.videoId;
-        ytPlayer.loadVideoById(data.videoId);
-      }
-
-      // Sinkronisasi status
-      blockHostEvents = true; // Jangan kirim balik event saat disuruh play
-      
-      // Toleransi perbedaan waktu (hanya seek jika beda lebih dari 2 detik)
-      const currentTime = ytPlayer.getCurrentTime();
-      if (Math.abs(currentTime - data.time) > 2) {
-        ytPlayer.seekTo(data.time, true);
-      }
-
-      if (data.command === 'PLAY') {
-        ytPlayer.playVideo();
-      } else if (data.command === 'PAUSE') {
-        ytPlayer.pauseVideo();
-      }
-
-      setTimeout(() => { blockHostEvents = false; }, 500);
-    }
-
-    function extractVideoID(url) {
-      var regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-      var match = url.match(regExp);
-      return (match && match[7].length == 11) ? match[7] : false;
-    }
-
-    function loadNewVideo() {
-      const url = el('ytUrlInput').value;
-      const vid = extractVideoID(url);
-      
-      if (vid) {
-        currentVideoId = vid;
-        initYouTubePlayer(vid);
-        setTimeout(() => {
-          sendSyncData('LOAD', 0, vid);
-        }, 1000); // Beri waktu player load sebelum nyuruh teman
-        el('ytUrlInput').value = '';
-      } else {
-        alert("Link YouTube tidak valid. Gunakan link standar seperti https://www.youtube.com/watch?v=...");
-      }
-    }
-
-    // Host mengirim sinyal detak waktu setiap 5 detik untuk memastikan teman tetap sinkron
-    function startHostSyncInterval() {
-      if (syncInterval) clearInterval(syncInterval);
-      syncInterval = setInterval(() => {
-        if (isHost && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
-          const state = ytPlayer.getPlayerState();
-          if (state === YT.PlayerState.PLAYING) {
-             sendSyncData('SYNC', ytPlayer.getCurrentTime(), currentVideoId);
-          }
-        }
-      }, 5000);
-    }
-
-
-    // --- Utilitas UI ---
-    function setStatus(text, color = 'bg-red-500') {
-      statusText.innerText = text;
-      statusDot.className = `w-2 h-2 rounded-full ${color} animate-pulse`;
-    }
-
-    function showRoomUI(roomIdText, isHosting) {
-      viewLobby.classList.add('hidden');
-      viewRoom.classList.remove('hidden');
-      roomControls.classList.remove('hidden');
-      el('roomIdDisplay').innerText = roomIdText;
-      
-      if (isHosting) {
-        ytControlBar.classList.remove('hidden');
-        placeholderText.innerText = "Tempel Link YouTube di atas untuk mulai Nobar!";
-      } else {
-        guestOverlay.classList.remove('hidden'); // Blokir klik
-      }
-    }
-
-    function copyRoomId() {
-      const id = el('roomIdDisplay').innerText;
-      navigator.clipboard.writeText(id).then(() => alert('ID disalin: ' + id))
-      .catch(err => alert('ID: ' + id));
-    }
-
-    // --- Logika HOST ---
-    function startHosting() {
-      if (!isAPIReady) {
-         alert("Sistem YouTube belum siap. Mohon tunggu 2 detik lalu klik lagi.");
-         return;
-      }
-      
-      const btn = el('hostBtn');
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan Ruangan...';
-      btn.disabled = true;
-
-      const roomId = 'YT-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-      
-      peer = new Peer(roomId, peerOptions);
-
-      peer.on('open', (id) => {
+    // ==========================================
+    // LOGIKA HOSTING
+    // ==========================================
+    async function startHosting(mode) {
+        roomMode = mode;
         isHost = true;
-        showRoomUI(id, true);
-        setStatus('Menunggu teman bergabung...', 'bg-yellow-400');
-        startHostSyncInterval();
-      });
-
-      // Ketika Guest terhubung (Hanya Data Channel)
-      peer.on('connection', (connection) => {
-        conn = connection;
+        roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         
-        conn.on('open', () => {
-          setupChatEvents();
-          setStatus('Teman terhubung! Masukkan link video.', 'bg-emerald-500');
-          el('chatParticipant').innerText = 'Teman Online';
-          
-          // Jika host sudah memutar video saat teman masuk, langsung kirimkan
-          if (currentVideoId && ytPlayer) {
-            sendSyncData('PLAY', ytPlayer.getCurrentTime(), currentVideoId);
-          }
-        });
-      });
-
-      peer.on('disconnected', () => { peer.reconnect(); });
-      peer.on('error', (err) => {
-        console.error("Host Error:", err);
-        alert('Kesalahan jaringan: ' + err.message);
-        leaveRoom();
-      });
-    }
-
-    // --- Logika GUEST ---
-    function joinRoom() {
-      let roomInput = el('roomInput').value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-      if (!roomInput) return;
-
-      const btn = el('joinBtn');
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghubungkan...';
-      btn.disabled = true;
-
-      peer = new Peer(peerOptions);
-
-      peer.on('open', () => {
-        isHost = false;
-        
-        // Timeout diperpanjang jadi 30 Detik
-        let connTimeout = setTimeout(() => {
-          if (!conn || !conn.open) {
-            alert('Waktu habis (30 Detik)! Jaringan seluler Anda memblokir koneksi. Solusi: Coba gunakan jaringan Wi-Fi untuk membuktikan aplikasi bekerja.');
-            leaveRoom();
-          }
-        }, 30000); 
-
-        // Hubungkan ke Host (Dengan reliable untuk jaringan seluler)
-        conn = peer.connect(roomInput, { reliable: true }); 
-        
-        conn.on('open', () => {
-          clearTimeout(connTimeout);
-          showRoomUI(roomInput, false);
-          setStatus('Terhubung! Menunggu Host memilih video.', 'bg-emerald-500');
-          el('chatParticipant').innerText = 'Host Online';
-          setupChatEvents();
-        });
-      });
-
-      peer.on('error', (err) => {
-        console.error("Guest Error:", err);
-        if (err.type === 'peer-unavailable') {
-          alert(`Ruangan "${roomInput}" tidak ditemukan! Pastikan Host belum keluar.`);
+        if (mode === 'screen') {
+            try {
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always" },
+                    audio: { echoCancellation: false, noiseSuppression: false } // Audio jernih untuk film
+                });
+                
+                document.getElementById('screenVideo').classList.remove('hidden');
+                document.getElementById('screenVideo').srcObject = localStream;
+                document.getElementById('screenVideo').muted = true;
+                
+                localStream.getVideoTracks()[0].onended = () => window.location.reload();
+            } catch (err) {
+                alert("Akses layar ditolak.");
+                return;
+            }
         } else {
-          alert('Terjadi kesalahan koneksi: ' + err.message);
+            document.getElementById('ytInputBar').classList.remove('hidden');
+            document.getElementById('ytPlayerContainer').classList.remove('hidden');
+            // Init YT Player kosong
+            ytPlayer = new YT.Player('ytPlayerContainer', {
+                events: { 'onStateChange': onHostYtStateChange }
+            });
         }
-        leaveRoom();
-      });
-      
-      peer.on('disconnected', () => { peer.reconnect(); });
-    }
 
-    // --- Logika Data Channel (Chat & Sync) ---
-    function setupChatEvents() {
-      chatInput.disabled = false;
-      sendBtn.disabled = false;
-      chatMessages.innerHTML = '';
-
-      conn.on('data', (data) => {
-        if (data.type === 'CHAT') {
-           appendMessage(data.text, isHost ? 'Guest' : 'Host', false);
-        } else if (data.type === 'SYNC' && !isHost) {
-           // Menerima perintah sinkronisasi dari Host
-           handleSyncData(data);
+        switchView();
+        connectSocket(mode);
+        
+        if (mode === 'youtube') {
+            hostSyncInterval = setInterval(() => {
+                if (ytPlayer && ytPlayer.getPlayerState() === 1) { // 1 = Playing
+                    socket.emit('sync-yt', { command: 'SYNC', time: ytPlayer.getCurrentTime() });
+                }
+            }, 3000);
         }
-      });
-
-      conn.on('close', () => {
-        setStatus('Koneksi terputus.', 'bg-red-500');
-        el('chatParticipant').innerText = 'Offline';
-        chatInput.disabled = true;
-        sendBtn.disabled = true;
-      });
     }
 
-    chatForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = chatInput.value.trim();
-      if (!text || !conn || !conn.open) return;
+    // ==========================================
+    // LOGIKA GUEST
+    // ==========================================
+    function joinRoom() {
+        const input = document.getElementById('roomInput').value.toUpperCase();
+        if (!input) return;
+        roomId = input;
+        isHost = false;
 
-      conn.send({ type: 'CHAT', text: text });
-      appendMessage(text, 'Anda', true);
-      chatInput.value = '';
-    });
-
-    function appendMessage(text, sender, isMe) {
-      const align = isMe ? 'items-end' : 'items-start';
-      const bgColor = isMe ? 'bg-red-600 text-white rounded-tr-none' : 'bg-gray-800 text-gray-200 rounded-tl-none';
-      
-      const msgHtml = `
-        <div class="flex flex-col ${align} animate-fade-in">
-          <span class="text-[10px] text-gray-500 mb-1 px-1">${sender}</span>
-          <div class="px-3 py-2 rounded-lg max-w-[85%] text-sm shadow-sm ${bgColor} break-words">
-            ${text}
-          </div>
-        </div>
-      `;
-      chatMessages.insertAdjacentHTML('beforeend', msgHtml);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+        // Asumsi mode: Jika ID diawali YT- (Bisa dimodifikasi jika format ID dibedakan, tapi di sini kita terima sinyal awal)
+        // Untuk amannya, Guest menyalakan kedua wadah. Sinyal pertama menentukan mode.
+        document.getElementById('ytPlayerContainer').classList.remove('hidden');
+        document.getElementById('guestOverlay').classList.remove('hidden');
+        document.getElementById('screenVideo').classList.remove('hidden');
+        
+        switchView();
+        connectSocket();
     }
 
-    // --- Keluar Ruangan ---
-    function leaveRoom() {
-      if (syncInterval) clearInterval(syncInterval);
-      if (conn) conn.close();
-      if (peer) peer.destroy();
-      if (ytPlayer) {
-        ytPlayer.destroy();
-        ytPlayer = null;
-      }
-      
-      currentVideoId = '';
-      
-      // Reset UI
-      viewRoom.classList.add('hidden');
-      roomControls.classList.add('hidden');
-      ytControlBar.classList.add('hidden');
-      guestOverlay.classList.add('hidden');
-      viewLobby.classList.remove('hidden');
-      placeholderVideo.classList.remove('hidden');
-      placeholderText.innerText = "Menunggu Host memutar video...";
-      
-      el('hostBtn').innerHTML = '<i class="fa-solid fa-plus"></i> Buat Ruangan';
-      el('hostBtn').disabled = false;
-      el('joinBtn').innerHTML = '<i class="fa-solid fa-play"></i> Gabung Menonton';
-      el('joinBtn').disabled = false;
-      el('roomInput').value = '';
-      
-      chatInput.disabled = true;
-      sendBtn.disabled = true;
-      el('chatParticipant').innerText = 'Menunggu...';
-      chatMessages.innerHTML = '<div class="text-center text-gray-500 text-sm mt-2 italic">Ruangan obrolan siap.</div>';
-      
-      // Buat ulang kontainer player untuk koneksi selanjutnya
-      el('ytPlayerContainer').outerHTML = '<div id="ytPlayerContainer" class="w-full h-full pointer-events-auto"></div>';
+    // ==========================================
+    // YOUTUBE SYNC (RINGAN & STABIL DI HP)
+    // ==========================================
+    function loadYtVideo() {
+        const url = document.getElementById('ytUrl').value;
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/);
+        if (match && match[1]) {
+            currentYtId = match[1];
+            ytPlayer.loadVideoById(currentYtId);
+            socket.emit('sync-yt', { command: 'LOAD', videoId: currentYtId, time: 0 });
+            document.getElementById('ytUrl').value = '';
+        } else {
+            alert('Link YouTube tidak valid');
+        }
+    }
+
+    function onHostYtStateChange(event) {
+        if (ignoreYtEvent) return;
+        const time = ytPlayer.getCurrentTime();
+        if (event.data === 1) socket.emit('sync-yt', { command: 'PLAY', time });
+        if (event.data === 2) socket.emit('sync-yt', { command: 'PAUSE', time });
+        if (event.data === 3) socket.emit('sync-yt', { command: 'PAUSE', time }); // Buffering
+    }
+
+    function handleYtSync(data) {
+        roomMode = 'youtube';
+        document.getElementById('screenVideo').classList.add('hidden'); // Sembunyikan layar
+        
+        if (!ytPlayer) {
+            ytPlayer = new YT.Player('ytPlayerContainer', {
+                videoId: data.videoId,
+                playerVars: { 'controls': 0, 'disablekb': 1, 'autoplay': 1 },
+                events: {
+                    'onReady': (e) => {
+                        document.getElementById('mobilePlayBtn').classList.remove('hidden');
+                    }
+                }
+            });
+            currentYtId = data.videoId;
+        } else if (data.videoId && data.videoId !== currentYtId) {
+            currentYtId = data.videoId;
+            ytPlayer.loadVideoById(data.videoId);
+        }
+
+        ignoreYtEvent = true;
+        if (Math.abs(ytPlayer.getCurrentTime() - data.time) > 2) {
+            ytPlayer.seekTo(data.time, true);
+        }
+        if (data.command === 'PLAY') ytPlayer.playVideo();
+        if (data.command === 'PAUSE') ytPlayer.pauseVideo();
+        setTimeout(() => ignoreYtEvent = false, 500);
+    }
+
+    function forcePlay() {
+        if (roomMode === 'youtube' && ytPlayer) ytPlayer.playVideo();
+        if (roomMode === 'screen') document.getElementById('screenVideo').play();
+        document.getElementById('mobilePlayBtn').classList.add('hidden');
+    }
+
+    // ==========================================
+    // WEBRTC SIGNALING UNTUK SCREEN SHARE (NETFLIX)
+    // ==========================================
+    function createPeerConnection(userId) {
+        const pc = new RTCPeerConnection(iceServers);
+        peerConnections[userId] = pc;
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit('webrtc-signal', { to: userId, signal: event.candidate });
+            }
+        };
+
+        if (isHost && localStream) {
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        } else {
+            pc.ontrack = (event) => {
+                roomMode = 'screen';
+                document.getElementById('ytPlayerContainer').classList.add('hidden');
+                const video = document.getElementById('screenVideo');
+                video.srcObject = event.streams[0];
+                video.play().catch(() => {
+                    document.getElementById('mobilePlayBtn').classList.remove('hidden');
+                });
+            };
+        }
+        return pc;
+    }
+
+    async function handleWebRTCSignal(fromUserId, signal) {
+        let pc = peerConnections[fromUserId];
+        if (!pc) pc = createPeerConnection(fromUserId);
+
+        if (signal.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('webrtc-signal', { to: fromUserId, signal: pc.localDescription });
+        } else if (signal.type === 'answer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+        } else if (signal.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal));
+        }
+    }
+
+    // ==========================================
+    // CHAT & UI
+    // ==========================================
+    document.getElementById('chatForm').onsubmit = (e) => {
+        e.preventDefault();
+        const input = document.getElementById('chatInput');
+        const text = input.value.trim();
+        if (text && socket) {
+            socket.emit('chat-message', { text, sender: isHost ? 'Host' : 'Guest' });
+            appendChat(text, 'Anda', true);
+            input.value = '';
+        }
+    };
+
+    function appendChat(text, sender, isMe) {
+        const container = document.getElementById('chatMessages');
+        const align = isMe ? 'items-end' : 'items-start';
+        const bg = isMe ? 'bg-indigo-600 rounded-tr-none text-white' : 'bg-gray-800 rounded-tl-none text-gray-200';
+        container.innerHTML += `<div class="flex flex-col ${align}"><span class="text-[10px] text-gray-500 px-1 mb-1">${sender}</span><div class="px-3 py-2 rounded-lg text-sm ${bg} max-w-[85%] break-words">${text}</div></div>`;
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function switchView() {
+        document.getElementById('lobbyView').classList.add('hidden');
+        document.getElementById('roomView').classList.remove('hidden');
+        document.getElementById('roomControls').classList.remove('hidden');
+        document.getElementById('roomIdDisplay').innerText = roomId;
     }
   </script>
 </body>
